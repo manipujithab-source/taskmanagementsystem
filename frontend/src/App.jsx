@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 
+import Login from "./components/Login";
+import Register from "./components/Register";
+
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import Dashboard from "./components/Dashboard";
@@ -12,77 +15,129 @@ import "./App.css";
 const API = "http://localhost:5000/api/tasks";
 
 function App() {
+  const [user, setUser] = useState(
+    JSON.parse(localStorage.getItem("user")) || null
+  );
+
+  const [showRegister, setShowRegister] = useState(false);
+
   const [tasks, setTasks] = useState([]);
+
   const [activePage, setActivePage] = useState("dashboard");
+
   const [search, setSearch] = useState("");
+
   const [filter, setFilter] = useState("All");
+
   const [editingTask, setEditingTask] = useState(null);
 
-  // Load tasks
+  // LOAD TASKS
   const loadTasks = async () => {
     try {
-      const response = await axios.get(API);
+      const token = localStorage.getItem("token");
+
+      const response = await axios.get(API, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
       setTasks(response.data);
     } catch (error) {
       console.log("Error loading tasks:", error);
     }
   };
 
+  // LOAD TASKS AFTER LOGIN
   useEffect(() => {
-    loadTasks();
-  }, []);
+    if (user) {
+      loadTasks();
+    }
+  }, [user]);
 
-  // Add task
+  // LOGIN
+  const handleLogin = (userData) => {
+    setUser(userData);
+  };
+
+  // LOGOUT
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+
+    setUser(null);
+    setTasks([]);
+  };
+
+  // ADD TASK
   const addTask = async (task) => {
     try {
-      await axios.post(API, task);
+      const token = localStorage.getItem("token");
+
+      await axios.post(API, task, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
       await loadTasks();
     } catch (error) {
       console.log("Error adding task:", error);
     }
   };
 
-  // Update task
+  // UPDATE TASK
   const updateTask = async (id, task) => {
     try {
-      await axios.put(`${API}/${id}`, task);
+      const token = localStorage.getItem("token");
+
+      await axios.put(`${API}/${id}`, task, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
       setEditingTask(null);
+
       await loadTasks();
     } catch (error) {
       console.log("Error updating task:", error);
     }
   };
 
-  // Delete task
+  // DELETE TASK
   const deleteTask = async (id) => {
     try {
-      await axios.delete(`${API}/${id}`);
+      const token = localStorage.getItem("token");
+
+      await axios.delete(`${API}/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
       await loadTasks();
     } catch (error) {
       console.log("Error deleting task:", error);
     }
   };
 
-  // Complete / pending
+  // COMPLETE TASK
   const toggleComplete = async (task) => {
-    try {
-      await updateTask(task._id, {
-        title: task.title,
-        description: task.description,
-        priority: task.priority,
-        category: task.category,
-        dueDate: task.dueDate,
-        status:
-          task.status === "Completed"
-            ? "Pending"
-            : "Completed"
-      });
-    } catch (error) {
-      console.log("Error updating status:", error);
-    }
+    await updateTask(task._id, {
+      title: task.title,
+      description: task.description,
+      priority: task.priority,
+      category: task.category,
+      dueDate: task.dueDate,
+      status:
+        task.status === "Completed"
+          ? "Pending"
+          : "Completed"
+    });
   };
 
-  // Search + filter
+  // SEARCH + FILTER
   const filteredTasks = tasks.filter((task) => {
     const matchesSearch = task.title
       .toLowerCase()
@@ -90,14 +145,17 @@ function App() {
 
     const matchesFilter =
       filter === "All" ||
-      (filter === "Pending" && task.status === "Pending") ||
-      (filter === "Completed" && task.status === "Completed") ||
-      (filter === "High" && task.priority === "High");
+      (filter === "Pending" &&
+        task.status === "Pending") ||
+      (filter === "Completed" &&
+        task.status === "Completed") ||
+      (filter === "High" &&
+        task.priority === "High");
 
     return matchesSearch && matchesFilter;
   });
 
-  // Important tasks
+  // IMPORTANT TASKS
   const importantTasks = tasks.filter(
     (task) =>
       task.priority === "High" &&
@@ -106,13 +164,45 @@ function App() {
         .includes(search.toLowerCase())
   );
 
-  // Calendar
+  // CALENDAR
   const calendarTasks = [...tasks].sort((a, b) => {
     if (!a.dueDate) return 1;
     if (!b.dueDate) return -1;
 
-    return new Date(a.dueDate) - new Date(b.dueDate);
+    return (
+      new Date(a.dueDate) -
+      new Date(b.dueDate)
+    );
   });
+
+  // =========================
+  // LOGIN / REGISTER
+  // =========================
+
+  if (!user) {
+    if (showRegister) {
+      return (
+        <Register
+          onShowLogin={() =>
+            setShowRegister(false)
+          }
+        />
+      );
+    }
+
+    return (
+      <Login
+        onLogin={handleLogin}
+        onShowRegister={() =>
+          setShowRegister(true)
+        }
+      />
+    );
+  }
+
+  // =========================
+  // MAIN APPLICATION
+  // =========================
 
   return (
     <div className="app">
@@ -127,6 +217,8 @@ function App() {
         <Navbar
           search={search}
           setSearch={setSearch}
+          user={user}
+          onLogout={handleLogout}
         />
 
         {/* DASHBOARD */}
@@ -134,7 +226,6 @@ function App() {
           <>
             <Dashboard tasks={tasks} />
 
-            {/* CREATE TASK FORM */}
             <TaskForm
               addTask={addTask}
               updateTask={updateTask}
@@ -142,7 +233,6 @@ function App() {
               setEditingTask={setEditingTask}
             />
 
-            {/* TASK LIST */}
             <TaskList
               tasks={filteredTasks}
               onComplete={toggleComplete}
@@ -161,33 +251,59 @@ function App() {
             </div>
 
             <div className="filter-buttons">
+
               <button
-                className={filter === "All" ? "active" : ""}
-                onClick={() => setFilter("All")}
+                className={
+                  filter === "All"
+                    ? "active"
+                    : ""
+                }
+                onClick={() =>
+                  setFilter("All")
+                }
               >
                 All
               </button>
 
               <button
-                className={filter === "Pending" ? "active" : ""}
-                onClick={() => setFilter("Pending")}
+                className={
+                  filter === "Pending"
+                    ? "active"
+                    : ""
+                }
+                onClick={() =>
+                  setFilter("Pending")
+                }
               >
                 Pending
               </button>
 
               <button
-                className={filter === "Completed" ? "active" : ""}
-                onClick={() => setFilter("Completed")}
+                className={
+                  filter === "Completed"
+                    ? "active"
+                    : ""
+                }
+                onClick={() =>
+                  setFilter("Completed")
+                }
               >
                 Completed
               </button>
 
               <button
-                className={filter === "High" ? "active" : ""}
-                onClick={() => setFilter("High")}
+                className={
+                  filter === "High"
+                    ? "active"
+                    : ""
+                }
+                onClick={() =>
+                  setFilter("High")
+                }
               >
                 High Priority
               </button>
+
             </div>
 
             <TaskForm
@@ -243,6 +359,7 @@ function App() {
                     className="calendar-task"
                     key={task._id}
                   >
+
                     <div>
                       <h3>{task.title}</h3>
                       <p>{task.description}</p>
@@ -257,8 +374,11 @@ function App() {
                           : "No date"}
                       </strong>
 
-                      <span>{task.priority}</span>
+                      <span>
+                        {task.priority}
+                      </span>
                     </div>
+
                   </div>
                 ))
               )}
@@ -268,6 +388,7 @@ function App() {
         )}
 
       </main>
+
     </div>
   );
 }
